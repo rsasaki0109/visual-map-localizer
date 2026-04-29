@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "visual-map-localizer"
+version = "0.1.0"
+description = "Single-image 6DoF Visual Positioning System on top of COLMAP / hloc"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Ryohei Sasaki" }
+]
+keywords = ["SfM", "COLMAP", "VPS", "localization", "SLAM", "computer-vision"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+dependencies = [
+    "numpy>=1.23",
+    "scipy>=1.10",
+    "opencv-python>=4.7",
+    "Pillow>=9.5",
+    "tqdm>=4.65",
+    "h5py>=3.8",
+    "pyyaml>=6.0",
+    "torch>=2.0",
+    "torchvision>=0.15",
+    "pycolmap>=0.6.1",
+    "click>=8.1",
+    "rich>=13.0",
+    # hloc must be installed separately (see README) —
+    # it is not available on PyPI:
+    #   pip install git+https://github.com/cvg/Hierarchical-Localization.git@master
+]
+
+[project.scripts]
+visual-map-localizer = "visual_map_localizer.cli.main:cli"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "ruff>=0.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["visual_map_localizer*"]
+exclude = ["tests*", "examples*", "docs*", "scripts*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# launch_testing (ROS) hijacks directory-level test collection if it is
+# installed system-wide. Disable it together with its ROS companion plugin
+# so pytest discovers our normal test_*.py files.
+addopts = """-q
+  -p no:launch_testing
+  -p no:launch_ros
+"""

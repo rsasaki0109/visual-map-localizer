@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local artefacts
+outputs/
+maps/
+*.h5
+*.bin
+*.npz
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Allow examples to keep their own data folders
+!examples/data/.gitkeep

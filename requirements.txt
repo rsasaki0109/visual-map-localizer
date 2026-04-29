@@ -1,0 +1,27 @@
+# --- core scientific stack -----------------------------------------------
+numpy>=1.23
+scipy>=1.10
+opencv-python>=4.7
+Pillow>=9.5
+tqdm>=4.65
+h5py>=3.8
+pyyaml>=6.0
+
+# --- deep learning -------------------------------------------------------
+# Install torch / torchvision matching your CUDA setup *before* the rest:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+torch>=2.0
+torchvision>=0.15
+
+# --- COLMAP / SfM bindings -----------------------------------------------
+pycolmap>=0.6.1
+
+# --- Hierarchical-Localization (NetVLAD / SuperPoint / LightGlue wrapper) -
+# hloc is not on PyPI — install from source:
+#   pip install git+https://github.com/cvg/Hierarchical-Localization.git@master
+# Listed here as a comment so `pip install -r requirements.txt` does not fail
+# on systems without git. Install hloc separately as documented in the README.
+
+# --- CLI / utilities -----------------------------------------------------
+click>=8.1
+rich>=13.0
