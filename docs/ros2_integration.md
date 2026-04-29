@@ -1,4 +1,10 @@
-# ROS2 統合 (将来計画)
+# ROS2 統合 (実装済み — 設計ノート)
+
+> **実装は `ros2/visual_map_localizer_ros/` 配下にあります。**
+> このドキュメントはノードの設計判断・座標系・拡張ポイントの解説です。
+> 実際のビルド方法やパラメータ一覧は
+> [`ros2/visual_map_localizer_ros/README.md`](../ros2/visual_map_localizer_ros/README.md) を参照。
+
 
 ## ノードイメージ
 

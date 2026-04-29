@@ -315,10 +315,27 @@ python3 scripts/evaluate_south_building.py \
 * SfM が成立する程度の画像 overlap が必要 (経験則: 隣接で 60% 以上)
 * SuperPoint / SuperGlue は研究用ライセンス。商用は DISK / LightGlue を推奨
 
+## ROS2 統合
+
+ROS2 (Jazzy 想定) ノードは `ros2/visual_map_localizer_ros/` 配下にあります。
+セットアップ・パラメータ詳細は [`ros2/visual_map_localizer_ros/README.md`](ros2/visual_map_localizer_ros/README.md) を参照。
+
+```bash
+# (build-map で作ったマップに対して)
+ros2 launch visual_map_localizer_ros vps.launch.py \
+    map_dir:=/abs/path/to/map \
+    publish_tf:=true
+```
+
+* sub: `/camera/image_raw` (sensor_msgs/Image) + `/camera/camera_info` (CameraInfo)
+* pub: `/vps_pose` (geometry_msgs/PoseWithCovarianceStamped) ※ ROS 慣例 world-from-camera
+* TF: `frame_id → child_frame_id` (`publish_tf:=true`)
+* in-flight 中の画像は drop (1Hz 級の絶対姿勢源として利用)
+
 ## アーキテクチャ / 拡張
 
 * [`docs/architecture.md`](docs/architecture.md) — モジュール構成 / データフロー
-* [`docs/ros2_integration.md`](docs/ros2_integration.md) — ROS2 ノード化 / VIO 融合
+* [`docs/ros2_integration.md`](docs/ros2_integration.md) — 設計ノート (実装は `ros2/`)
 * 大規模地図対応 (sharding / Faiss ANN) はアーキテクチャドキュメントに記載
 
 ## 開発
