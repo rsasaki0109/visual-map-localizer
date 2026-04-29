@@ -46,7 +46,6 @@ from geometry_msgs.msg import (
     TransformStamped,
 )
 from std_msgs.msg import Header
-from cv_bridge import CvBridge
 
 from visual_map_localizer import VisualMapLocalizer
 from visual_map_localizer.config import LocalizeConfig
@@ -82,6 +81,35 @@ def _quat_from_rotmat(R: np.ndarray) -> np.ndarray:
         y = (m[1, 2] + m[2, 1]) / s
         z = 0.25 * s
     return np.array([x, y, z, w], dtype=np.float64)
+
+
+def _image_msg_to_rgb_array(msg: Image) -> np.ndarray:
+    """Decode a `sensor_msgs/Image` to an HxWx3 uint8 RGB array.
+
+    We deliberately avoid `cv_bridge` because the cv_bridge shipped with
+    ROS2 Jazzy is built against numpy 1.x and segfaults under numpy >= 2.
+    Only the encodings we actually publish from typical cameras are
+    supported here.
+    """
+    enc = (msg.encoding or "").lower()
+    h, w = int(msg.height), int(msg.width)
+    buf = bytes(msg.data)
+    if enc == "rgb8":
+        arr = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 3)
+        return arr.copy()
+    if enc == "bgr8":
+        arr = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 3)
+        return np.ascontiguousarray(arr[..., ::-1])
+    if enc == "rgba8":
+        arr = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 4)
+        return arr[..., :3].copy()
+    if enc == "bgra8":
+        arr = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 4)
+        return np.ascontiguousarray(arr[..., 2::-1])
+    if enc in ("mono8", "8uc1"):
+        gray = np.frombuffer(buf, dtype=np.uint8).reshape(h, w)
+        return np.repeat(gray[..., None], 3, axis=2)
+    raise ValueError(f"unsupported image encoding: {msg.encoding!r}")
 
 
 def _pycolmap_camera_from_camera_info(msg: CameraInfo):
@@ -174,7 +202,6 @@ class VpsNode(Node):
         )
 
         # -------- IO
-        self.bridge = CvBridge()
         self._busy_lock = threading.Lock()
         self._busy = False
         self._frame_counter = 0
@@ -262,9 +289,9 @@ class VpsNode(Node):
 
         try:
             try:
-                rgb = self.bridge.imgmsg_to_cv2(msg, desired_encoding="rgb8")
+                rgb = _image_msg_to_rgb_array(msg)
             except Exception as exc:
-                self.get_logger().error(f"cv_bridge conversion failed: {exc}")
+                self.get_logger().error(f"image decode failed: {exc}")
                 return
 
             self._frame_counter += 1

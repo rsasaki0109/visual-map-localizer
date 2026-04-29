@@ -168,6 +168,11 @@ class VisualMapLocalizer:
             input_image_path = query_image
 
         try:
+            # When the query came from an in-memory ndarray, the H5 may
+            # already contain stale features for the same `query_name` from
+            # a previous run (vps_node restart, replay, etc.) — we must
+            # always re-extract to avoid silently reusing the wrong image.
+            overwrite_q = is_array
             # ---------------------- 1. global descriptor for the query --------
             t = time.perf_counter()
             extract_features.main(
@@ -176,7 +181,7 @@ class VisualMapLocalizer:
                 self.map_dir,
                 image_list=[query_name],
                 feature_path=self.global_desc_path,
-                overwrite=False,
+                overwrite=overwrite_q,
             )
             timing["global_descriptor"] = time.perf_counter() - t
 
@@ -206,7 +211,7 @@ class VisualMapLocalizer:
                 self.map_dir,
                 image_list=[query_name],
                 feature_path=self.features_path,
-                overwrite=False,
+                overwrite=overwrite_q,
             )
             timing["local_features"] = time.perf_counter() - t
 
@@ -307,7 +312,12 @@ def _write_image_array(arr: np.ndarray, dst: Path) -> None:
         bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
     else:
         bgr = arr
-    cv2.imwrite(str(dst), bgr)
+    ok = cv2.imwrite(str(dst), bgr)
+    if not ok or not dst.exists():
+        raise IOError(
+            f"cv2.imwrite failed for {dst} "
+            f"(shape={arr.shape}, dtype={arr.dtype}, dir_exists={dst.parent.exists()})"
+        )
 
 
 def _read_retrieval_neighbors(pairs_path: Path, query_name: str) -> List[str]:
