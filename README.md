@@ -182,6 +182,32 @@ print(result.success, result.inliers)
 print(result.to_json())
 ```
 
+### np.ndarray を直接渡す (ROS 統合・常駐サーバ向け)
+
+```python
+import numpy as np
+from PIL import Image
+import pycolmap
+
+from visual_map_localizer import VisualMapLocalizer
+from visual_map_localizer.config import LocalizeConfig
+
+localizer = VisualMapLocalizer("./map", config=LocalizeConfig(top_k=10))
+
+# どこかのストリーム / cv_bridge / カメラ SDK から:
+rgb = np.asarray(Image.open("query.jpg").convert("RGB"))  # H×W×3 uint8 (RGB)
+
+camera = pycolmap.Camera(model="PINHOLE", width=rgb.shape[1], height=rgb.shape[0],
+                         params=[fx, fy, cx, cy])
+result = localizer.localize(rgb, camera=camera, name="frame_0123.png")
+print(result.inliers, result.pose["t"])
+```
+
+`localize()` は `Path` でも `np.ndarray` でも受け取ります。ndarray の場合は
+`camera` 必須（EXIF が無いので）。`name` は省略可能で、内部キャッシュキーになります。
+
+### マップ構築 (Python API)
+
 ```python
 from visual_map_localizer.mapping import build_map
 from visual_map_localizer.config import MappingConfig
@@ -192,6 +218,19 @@ build_map(
     config=MappingConfig(num_covisible_pairs=20),
 )
 ```
+
+## レイテンシ目安
+
+south-building (118 db imgs, 3072×2304 query, GPU, DISK+LightGlue+NetVLAD):
+
+| 起動方法 | 初回 (warmup 込) | 2 回目以降 (steady-state) |
+|---|---|---|
+| `python3 -m visual_map_localizer.cli.main localize ...` (毎回 subprocess) | — | **8.6 s / query** |
+| `VisualMapLocalizer` インスタンス使い回し (path) | 4.1 s | **1.1 s / query** |
+| `VisualMapLocalizer` インスタンス使い回し (ndarray) | 4.4 s | **1.4 s / query** |
+
+ndarray 版の +0.3s は PNG エンコードが主因。ROS 系の **1280×720** クラスならエンコードが 0.03s 程度に縮むので、サブセカンドが現実的です。
+詳細プロファイルは `scripts/profile_localize.py` を参照。
 
 ## サンプル
 

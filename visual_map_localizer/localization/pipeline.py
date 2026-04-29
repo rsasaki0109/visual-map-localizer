@@ -98,11 +98,27 @@ class VisualMapLocalizer:
     # --------------------------------------------------------------- localize
     def localize(
         self,
-        query_image: str | Path,
+        query_image,
         *,
         work_dir: Optional[Path] = None,
         keep_work_dir: bool = False,
+        camera=None,
+        name: Optional[str] = None,
     ) -> LocalizationResult:
+        """Localize a single image.
+
+        Parameters
+        ----------
+        query_image : str | Path | np.ndarray
+            Either a path on disk, or an in-memory image (HxWx3 uint8, RGB or
+            BGR — both work because hloc converts internally).
+        camera : pycolmap.Camera | None
+            Override for the query camera. Required when `query_image` is a
+            numpy array; optional for path inputs (EXIF-inferred otherwise).
+        name : str | None
+            Logical filename to use inside the hloc cache. Defaults to the
+            input path's basename or, for arrays, an auto-generated name.
+        """
         from hloc import (  # noqa: WPS433 — heavy import, kept lazy
             extract_features,
             match_features,
@@ -113,23 +129,43 @@ class VisualMapLocalizer:
         t0 = time.perf_counter()
         timing: dict = {}
 
-        query_image = Path(query_image).resolve()
-        if not query_image.exists():
-            return LocalizationResult.failure(
-                f"query image not found: {query_image}", query=str(query_image)
-            )
+        is_array = _is_image_array(query_image)
+        if is_array:
+            if camera is None:
+                return LocalizationResult.failure(
+                    "camera must be provided when query_image is a numpy array",
+                    query=name,
+                )
+            stem = name or f"live_{int(t0 * 1000)}.png"
+            query_path_for_log = stem
+        else:
+            query_image = Path(query_image).resolve()
+            if not query_image.exists():
+                return LocalizationResult.failure(
+                    f"query image not found: {query_image}", query=str(query_image)
+                )
+            query_path_for_log = str(query_image)
 
         # All hloc helpers operate on (image_dir, image_name) so we stage the
-        # query into a temp folder that contains a single file.
+        # query into a temp folder that contains a single file. For ndarray
+        # inputs we serialize once to PNG inside the same staging folder.
         work_dir = Path(work_dir or self.map_dir / "_query_tmp").resolve()
         work_dir.mkdir(parents=True, exist_ok=True)
         query_dir = work_dir / "query_images"
         query_dir.mkdir(parents=True, exist_ok=True)
-        query_name = f"query/{query_image.name}"
-        staged = query_dir / "query" / query_image.name
-        staged.parent.mkdir(parents=True, exist_ok=True)
-        if not staged.exists():
-            staged.write_bytes(query_image.read_bytes())
+        if is_array:
+            query_name = f"query/{stem}"
+            staged = query_dir / "query" / stem
+            staged.parent.mkdir(parents=True, exist_ok=True)
+            _write_image_array(query_image, staged)
+            input_image_path = staged
+        else:
+            query_name = f"query/{query_image.name}"
+            staged = query_dir / "query" / query_image.name
+            staged.parent.mkdir(parents=True, exist_ok=True)
+            if not staged.exists():
+                staged.write_bytes(query_image.read_bytes())
+            input_image_path = query_image
 
         try:
             # ---------------------- 1. global descriptor for the query --------
@@ -159,7 +195,7 @@ class VisualMapLocalizer:
             if not retrieved:
                 return LocalizationResult.failure(
                     "retrieval returned no candidate db images",
-                    query=str(query_image), timing=timing,
+                    query=query_path_for_log, timing=timing,
                 )
 
             # ---------------------- 3. local features for the query ----------
@@ -191,7 +227,8 @@ class VisualMapLocalizer:
 
             # ---------------------- 5. localize via QueryLocalizer ------------
             t = time.perf_counter()
-            camera = self._build_query_camera(query_image)
+            if camera is None:
+                camera = self._build_query_camera(input_image_path)
             db_ids = self.map.db_ids_for_names(retrieved)
 
             ransac_conf = {"estimation": {"ransac": {"max_error": self.config.ransac_max_error_px}}}
@@ -216,7 +253,7 @@ class VisualMapLocalizer:
                     if success else "PnP failed",
                     retrieval=retrieved,
                     num_matches=int(log.get("num_matches", 0)) if isinstance(log, dict) else 0,
-                    query=str(query_image), timing=timing,
+                    query=query_path_for_log, timing=timing,
                 )
 
             R, t_vec, qvec = _extract_pose_from_hloc(ret)
@@ -231,7 +268,7 @@ class VisualMapLocalizer:
                 reproj_error=reproj_err,
                 num_matches=num_matches,
                 retrieval=retrieved,
-                query=str(query_image),
+                query=query_path_for_log,
                 timing=timing,
                 qvec=qvec,
             )
@@ -249,6 +286,30 @@ class VisualMapLocalizer:
 
 
 # ---------------------------------------------------------------- helpers
+def _is_image_array(obj) -> bool:
+    return isinstance(obj, np.ndarray) and obj.ndim in (2, 3)
+
+
+def _write_image_array(arr: np.ndarray, dst: Path) -> None:
+    """Persist a HxW or HxWx3 uint8 image to PNG.
+
+    Expects RGB layout for 3-channel inputs (which is what ROS, PIL and
+    matplotlib all use). cv2.imwrite needs BGR so we convert before writing.
+    Floating-point inputs are clipped to ``[0, 255]`` and downcast to uint8.
+    """
+    import cv2
+
+    if arr.ndim == 3 and arr.shape[2] not in (1, 3):
+        raise ValueError(f"unexpected image array shape: {arr.shape}")
+    if arr.dtype != np.uint8:
+        arr = np.clip(arr, 0, 255).astype(np.uint8)
+    if arr.ndim == 3 and arr.shape[2] == 3:
+        bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+    else:
+        bgr = arr
+    cv2.imwrite(str(dst), bgr)
+
+
 def _read_retrieval_neighbors(pairs_path: Path, query_name: str) -> List[str]:
     out: List[str] = []
     with open(pairs_path, "r", encoding="utf-8") as f:
