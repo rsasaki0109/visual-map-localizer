@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `scripts/render_cambridge_results.py` and two new figures
+  (`docs/assets/cambridge_shopfacade.png`,
+  `docs/assets/cambridge_oldhospital.png`) embedded in the README.
+  Each figure shows a top-down GT-vs-estimated trajectory plus
+  rotation / translation error histograms for the scene.
+
 ## [0.2.1] - 2026-05-01
 
 Patch release: corrects the numbers reported in v0.2.0. The localizer

@@ -434,6 +434,8 @@ python3 scripts/evaluate_south_building.py \
 
 ## 公開データセット検証 (Cambridge ShopFacade, 334 枚)
 
+<img src="docs/assets/cambridge_shopfacade.png" alt="ShopFacade GT vs estimated test poses (top-down) and error histograms" width="100%">
+
 south-building は単一日のキャプチャなので "条件が一定で簡単" な部類です。
 そこでもう 1 段難しい標準ベンチマーク **[Cambridge Landmarks](https://www.repository.cam.ac.uk/handle/1810/251336) ShopFacade**
 (屋外の通り、撮影日が異なる、人や車の写り込みあり) でも検証しました。
@@ -497,6 +499,8 @@ python3 scripts/evaluate_cambridge.py score \
 </details>
 
 ## 公開データセット検証 (Cambridge Old Hospital, 1077 枚)
+
+<img src="docs/assets/cambridge_oldhospital.png" alt="Old Hospital GT vs estimated test poses (top-down) and error histograms" width="100%">
 
 ShopFacade はキャンパス内通りの 1 ファサードでしたが、もう 1 段スケールが大きい
 **Cambridge Old Hospital** (病院ファサード、895 train / 182 test、シーン全幅 ~62 m)
@@ -606,6 +610,7 @@ CI ではこれを Python 3.10 / 3.11 / 3.12 で実行しています ([`.github
 - [`examples/localize_example.py`](examples/localize_example.py)
 - [`scripts/evaluate_south_building.py`](scripts/evaluate_south_building.py) — south-building 用の Sim(3) 整列 + pose 誤差評価
 - [`scripts/evaluate_cambridge.py`](scripts/evaluate_cambridge.py) — Cambridge Landmarks (NVM) 用の 3-stage 評価 (`prepare` / `localize-all` / `score`)
+- [`scripts/render_cambridge_results.py`](scripts/render_cambridge_results.py) — README 埋め込み用の trajectory + error histogram 図 (`[demo]` extras 必須)
 - [`scripts/profile_localize.py`](scripts/profile_localize.py) — 常駐プロセスのレイテンシ計測
 
 ## ライセンス
