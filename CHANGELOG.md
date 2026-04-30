@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-01
+
+Headline change: ROS2 nodes now reject visually-plausible-but-spatially-
+implausible poses before publishing them, and there are two more public
+datasets verified end-to-end.
+
 ### Added
 - ROS2 outlier-rejection gate (`pose_gate.PoseGate` + 8 unit tests):
   any localized pose whose implied linear (>10 m/s) or angular
@@ -24,6 +30,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tuned to a single capture.
 - README at-a-glance header now shows three datasets side by side
   (south-building + Cambridge ShopFacade + Cambridge Old Hospital).
+- pytest `testpaths` extended to also collect
+  `ros2/visual_map_localizer_ros/test/`; the rclpy-touching tests
+  guard themselves with `pytest.importorskip` so they skip cleanly
+  on stock CI.
+
+### Changed
+- README no longer cites hardware-specific wall times or GPU model
+  names. Per-frame latency is replaced with a short prose section on
+  the architectural levers (subprocess vs persistent instance, ndarray
+  vs path, resolution scaling). Accuracy numbers are unchanged.
 
 ## [0.1.0] - 2026-05-01
 
@@ -92,5 +108,6 @@ First public release.
 - **ROS2 end-to-end**: identical accuracy via `/camera/image_raw` →
   `/vps_pose` round-trip.
 
-[Unreleased]: https://github.com/rsasaki0109/visual-map-localizer/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/rsasaki0109/visual-map-localizer/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/rsasaki0109/visual-map-localizer/releases/tag/v0.2.0
 [0.1.0]: https://github.com/rsasaki0109/visual-map-localizer/releases/tag/v0.1.0
