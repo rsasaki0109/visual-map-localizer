@@ -46,6 +46,12 @@ South-Building dataset, 118 db / 10 query images, DISK + LightGlue + NetVLAD.</s
 <td align="center"><b>0.93°</b></td>
 <td align="center"><b>0.49 %</b><br><sub>of scene</sub></td>
 </tr>
+<tr>
+<td align="right"><b>Cambridge Old Hospital</b><br><sub>895 db / 182 query, multi-day, larger building</sub></td>
+<td align="center"><b>182 / 182</b></td>
+<td align="center"><b>1.11°</b></td>
+<td align="center"><b>1.42 %</b><br><sub>of scene</sub></td>
+</tr>
 </tbody>
 </table>
 
@@ -82,6 +88,7 @@ flowchart LR
 - [レイテンシ](#レイテンシ)
 - [公開データセット検証 (south-building)](#公開データセット検証-south-building-128-枚)
 - [公開データセット検証 (Cambridge ShopFacade)](#公開データセット検証-cambridge-shopfacade-334-枚)
+- [公開データセット検証 (Cambridge Old Hospital)](#公開データセット検証-cambridge-old-hospital-1077-枚)
 - [ROS2 統合](#ros2-統合)
 - [制約 / 注意](#制約--注意)
 - [開発](#開発)
@@ -481,6 +488,61 @@ python3 scripts/evaluate_cambridge.py localize-all \
 python3 scripts/evaluate_cambridge.py score \
     --scene /tmp/vml-public/cambridge/ShopFacade \
     --work /tmp/vml-public/cambridge/work
+```
+
+</details>
+
+## 公開データセット検証 (Cambridge Old Hospital, 1077 枚)
+
+ShopFacade はキャンパス内通りの 1 ファサードでしたが、もう 1 段スケールが大きい
+**Cambridge Old Hospital** (病院ファサード、895 train / 182 test、シーン全幅 ~62 m)
+でも同じパイプラインで end-to-end 検証しました。`evaluate_cambridge.py` は scene-agnostic
+なので `--scene` を差し替えるだけです。
+
+| 指標 | 値 |
+|---|---|
+| **成功率** | **182 / 182** |
+| **回転誤差** | median **1.11°**, mean 1.19°, max 3.21° |
+| **並進誤差** | median **0.88 m**, max 2.43 m<br>(シーン全幅 62.30 m、つまり **1.42 % / 3.91 %**) |
+| Sim(3) 整列に使った train 画像 | 895 / 895 (100% reconstructed) |
+| build-map 所要 | ~4.5 h (GPU, DISK + LightGlue + NetVLAD) |
+
+ShopFacade (median 0.49 %) より約 3 倍悪化していますが、これは想定内です:
+シーンが約 1.5 倍広くなり、撮影距離も伸び、視点間の overlap も小さくなるため、
+SfM ベース手法の絶対誤差は素直にスケールします。それでも **全 182 枚** が成功し、
+median 並進誤差がシーン全幅の 1.5 % 程度に収まっているので、
+PoseNet 系 (~5 % @ Old Hospital) よりは明らかに良く、
+Active Search / DSAC* といった専用手法 (~0.3 %) には劣る、という
+"hloc 派生の SfM パイプラインらしい" 立ち位置に着地しています。
+
+<details>
+<summary><b>再現手順 (クリックで展開)</b></summary>
+
+```bash
+# 1) データ取得 (~5 GB)
+mkdir -p /tmp/vml-public/cambridge && cd /tmp/vml-public/cambridge
+curl -L -C - -o OldHospital.zip \
+  "https://api.repository.cam.ac.uk/server/api/core/bitstreams/ae577bfb-bdce-488c-8ce6-3765eabe420e/content"
+unzip -q OldHospital.zip
+
+# 2)〜5) ShopFacade と同じ流れ。--scene と --work だけ OldHospital 用に差し替え。
+python3 scripts/evaluate_cambridge.py prepare \
+    --scene /tmp/vml-public/cambridge/OldHospital \
+    --work /tmp/vml-public/cambridge/work_oh
+
+visual-map-localizer build-map \
+    --images /tmp/vml-public/cambridge/work_oh/train_images \
+    --output /tmp/vml-public/cambridge/work_oh/map \
+    --local-feature disk --matcher disk+lightglue \
+    --num-covisible-pairs 20
+
+python3 scripts/evaluate_cambridge.py localize-all \
+    --scene /tmp/vml-public/cambridge/OldHospital \
+    --work /tmp/vml-public/cambridge/work_oh
+
+python3 scripts/evaluate_cambridge.py score \
+    --scene /tmp/vml-public/cambridge/OldHospital \
+    --work /tmp/vml-public/cambridge/work_oh
 ```
 
 </details>
