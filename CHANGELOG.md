@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `scripts/evaluate_cambridge.py score` now defaults to a robust
+  IRLS Sim(3) fit between our SfM and the dataset's NVM frame.
+  When auditing the v0.2.0 results we noticed a handful of train
+  images were mis-registered in our SfM (2 / 231 on ShopFacade,
+  13 / 895 on Old Hospital) and biased the alignment. With the
+  outliers dropped, the published median errors tighten:
+    - ShopFacade: 0.93°/0.21 m → **0.61°/0.096 m** (0.49% → 0.23%)
+    - Old Hospital: 1.11°/0.88 m → **1.11°/0.85 m** (1.42% → 1.37%)
+  Use `--no-robust-sim3` to reproduce the legacy LS behaviour.
+- README at-a-glance and detail sections updated with the
+  robust-Sim(3) numbers.
+
 ## [0.2.0] - 2026-05-01
 
 Headline change: ROS2 nodes now reject visually-plausible-but-spatially-

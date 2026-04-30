@@ -43,14 +43,14 @@ South-Building dataset, 118 db / 10 query images, DISK + LightGlue + NetVLAD.</s
 <tr>
 <td align="right"><b>Cambridge ShopFacade</b><br><sub>231 db / 103 query, multi-day, w/ pedestrians</sub></td>
 <td align="center"><b>103 / 103</b></td>
-<td align="center"><b>0.93°</b></td>
-<td align="center"><b>0.49 %</b><br><sub>of scene</sub></td>
+<td align="center"><b>0.61°</b></td>
+<td align="center"><b>0.23 %</b><br><sub>of scene</sub></td>
 </tr>
 <tr>
 <td align="right"><b>Cambridge Old Hospital</b><br><sub>895 db / 182 query, multi-day, larger building</sub></td>
 <td align="center"><b>182 / 182</b></td>
 <td align="center"><b>1.11°</b></td>
-<td align="center"><b>1.42 %</b><br><sub>of scene</sub></td>
+<td align="center"><b>1.37 %</b><br><sub>of scene</sub></td>
 </tr>
 </tbody>
 </table>
@@ -440,19 +440,26 @@ south-building は単一日のキャプチャなので "条件が一定で簡単
 公式 train/test split (231 db / 103 test) をそのまま使い、
 DISK + LightGlue + NetVLAD で 1 度だけ実行した結果:
 
+> **整列方法**: 自前 SfM 座標系から NVM 座標系への Sim(3) を求める際、
+> 自前 SfM 側で稀に大きく誤推定される train 画像 (ShopFacade で 2 枚 / 231) が
+> Least-Squares 整列を引っ張る現象があったため、`evaluate_cambridge.py` では
+> **IRLS robust Sim(3)** を既定にしました (整列残差が中央値の 5 倍を超える train 画像を
+> 反復で除外)。`--no-robust-sim3` で従来の LS 挙動に戻せます。
+
 | 指標 | 値 |
 |---|---|
 | **成功率** | **103 / 103** |
 | inlier 数 (median) | ≈ 5000 |
 | reprojection error | 〜5 px |
-| **回転誤差** | median **0.93°**, mean 0.99°, max 2.49° |
-| **並進誤差** | median **0.21 m**, max 2.08 m<br>(シーン全幅 42.7 m、つまり **0.49 % / 4.89 %**) |
-| Sim(3) 整列に使った train 画像 | 231 / 231 (100% reconstructed) |
+| **回転誤差** | median **0.61°**, mean 0.71°, max 2.88° |
+| **並進誤差** | median **0.096 m**, max 2.03 m<br>(シーン全幅 42.7 m、つまり **0.23 % / 4.76 %**) |
+| Sim(3) 整列に使った train 画像 | 229 / 231 (IRLS で 2 枚を SfM 整列の outlier として除外) |
 
 south-building (median 0.066° / 0.034%) より 1 桁悪化していますが、
 照度変化・歩行者・車両・経年変化を含む屋外データに対して **全 103 枚** が成功し、
-median 並進誤差がシーン全幅の 0.5 % 未満に収まっているのは、
-このパイプラインが "easy デモ" 専用ではなく VPS ベンチの本流で動くことを示しています。
+median 並進誤差がシーン全幅の **0.23 %** に収まっているのは、
+このパイプラインが "easy デモ" 専用ではなく VPS ベンチの本流で動くことを示しています
+(SfM ベース手法 Active Search の 0.12 m / 0.4° と同オーダー)。
 
 <details>
 <summary><b>再現手順 (クリックで展開)</b></summary>
@@ -500,13 +507,13 @@ ShopFacade はキャンパス内通りの 1 ファサードでしたが、もう
 |---|---|
 | **成功率** | **182 / 182** |
 | **回転誤差** | median **1.11°**, mean 1.19°, max 3.21° |
-| **並進誤差** | median **0.88 m**, max 2.43 m<br>(シーン全幅 62.30 m、つまり **1.42 % / 3.91 %**) |
-| Sim(3) 整列に使った train 画像 | 895 / 895 (100% reconstructed) |
+| **並進誤差** | median **0.85 m**, max 2.40 m<br>(シーン全幅 62.30 m、つまり **1.37 % / 3.85 %**) |
+| Sim(3) 整列に使った train 画像 | 882 / 895 (IRLS で 13 枚を SfM 整列の outlier として除外) |
 
-ShopFacade (median 0.49 %) より約 3 倍悪化していますが、これは想定内です:
-シーンが約 1.5 倍広くなり、撮影距離も伸び、視点間の overlap も小さくなるため、
+ShopFacade (median 0.23 %) より約 6 倍悪化していますが、これは想定内です:
+シーンが約 1.5 倍広く、撮影距離も伸び、視点間の overlap も小さくなるため、
 SfM ベース手法の絶対誤差は素直にスケールします。それでも **全 182 枚** が成功し、
-median 並進誤差がシーン全幅の 1.5 % 程度に収まっているので、
+median 並進誤差がシーン全幅の 1.4 % 程度に収まっているので、
 PoseNet 系 (~5 % @ Old Hospital) よりは明らかに良く、
 Active Search / DSAC* といった専用手法 (~0.3 %) には劣る、という
 "hloc 派生の SfM パイプラインらしい" 立ち位置に着地しています。

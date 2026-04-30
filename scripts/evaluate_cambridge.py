@@ -132,6 +132,38 @@ def umeyama(src: np.ndarray, dst: np.ndarray) -> Tuple[float, np.ndarray, np.nda
     return s, R, t
 
 
+def umeyama_robust(
+    src: np.ndarray,
+    dst: np.ndarray,
+    *,
+    n_iters: int = 5,
+    inlier_factor: float = 5.0,
+) -> Tuple[float, np.ndarray, np.ndarray, np.ndarray]:
+    """IRLS-style Sim(3): drop train pairs whose residual exceeds
+    `inlier_factor * median(residuals)` and refit, repeating up to
+    `n_iters` times. Useful when our SfM happens to misregister a
+    handful of train images vs. the reference NVM and these outliers
+    bias the LS alignment.
+
+    Returns (s, R, t, inlier_mask) where inlier_mask is bool over `src`.
+    """
+    s, R, t = umeyama(src, dst)
+    aligned = (s * R @ src.T).T + t
+    resid = np.linalg.norm(aligned - dst, axis=1)
+    keep = np.ones(len(src), dtype=bool)
+    for _ in range(n_iters):
+        med = float(np.median(resid[keep]))
+        new_keep = resid <= max(med * inlier_factor, 1e-9)
+        if int(new_keep.sum()) == int(keep.sum()) or new_keep.sum() < 4:
+            keep = new_keep
+            break
+        keep = new_keep
+        s, R, t = umeyama(src[keep], dst[keep])
+        aligned = (s * R @ src.T).T + t
+        resid = np.linalg.norm(aligned - dst, axis=1)
+    return s, R, t, keep
+
+
 # ---------------------------------------------------------------------------
 # Subcommands
 # ---------------------------------------------------------------------------
@@ -265,10 +297,16 @@ def cmd_score(args: argparse.Namespace) -> int:
     if len(src) < 4:
         print("[score] not enough train alignment points", file=sys.stderr)
         return 1
-    s, R, t = umeyama(src, dst)
+    if args.robust_sim3:
+        s, R, t, mask = umeyama_robust(src, dst)
+        n_in = int(mask.sum())
+        print(f"[score] robust Sim(3) on {n_in}/{len(src)} train imgs "
+              f"(IRLS dropped {len(src) - n_in} alignment outliers): scale={s:.4f}")
+    else:
+        s, R, t = umeyama(src, dst)
+        print(f"[score] LS Sim(3) on {len(src)} train imgs: scale={s:.4f}")
     scene_extent = float(np.linalg.norm(dst.max(0) - dst.min(0)))
-    print(f"[score] Sim(3) on {len(src)} train imgs: scale={s:.4f}, "
-          f"scene extent={scene_extent:.2f}")
+    print(f"[score] scene extent={scene_extent:.2f}")
 
     rot_errs: List[float] = []
     trans_errs: List[float] = []
@@ -352,6 +390,16 @@ def main() -> int:
     p = sub.add_parser("score")
     p.add_argument("--scene", required=True)
     p.add_argument("--work", required=True)
+    p.add_argument(
+        "--robust-sim3",
+        dest="robust_sim3", action="store_true", default=True,
+        help="Iteratively drop train alignment outliers (default).",
+    )
+    p.add_argument(
+        "--no-robust-sim3",
+        dest="robust_sim3", action="store_false",
+        help="Use plain least-squares Sim(3) (legacy behaviour).",
+    )
     p.set_defaults(func=cmd_score)
 
     args = ap.parse_args()
