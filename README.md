@@ -25,15 +25,28 @@ South-Building dataset, 118 db / 10 query images, DISK + LightGlue + NetVLAD.</s
 ---
 
 <table align="center">
+<thead>
 <tr>
-<td align="center"><sub>Success rate</sub><br><b>10 / 10</b></td>
-<td align="center"><sub>Median rot. error</sub><br><b>0.066°</b></td>
-<td align="center"><sub>Median trans. error</sub><br><b>0.034 %</b><br><sub>(of scene extent)</sub></td>
-<td align="center"><sub>Steady-state latency</sub><br><b>1.4 s / frame</b></td>
+<th></th>
+<th align="center"><sub>Success</sub></th>
+<th align="center"><sub>Median rot. err</sub></th>
+<th align="center"><sub>Median trans. err</sub></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="right"><b>south-building</b><br><sub>118 db / 10 query, single capture day</sub></td>
+<td align="center"><b>10 / 10</b></td>
+<td align="center"><b>0.066°</b></td>
+<td align="center"><b>0.034 %</b><br><sub>of scene</sub></td>
 </tr>
 <tr>
-<td colspan="4" align="center"><sub>south-building (118 db / 10 query, GPU, DISK + LightGlue + NetVLAD)</sub></td>
+<td align="right"><b>Cambridge ShopFacade</b><br><sub>231 db / 103 query, multi-day, w/ pedestrians</sub></td>
+<td align="center"><b>103 / 103</b></td>
+<td align="center"><b>0.93°</b></td>
+<td align="center"><b>0.49 %</b><br><sub>of scene</sub></td>
 </tr>
+</tbody>
 </table>
 
 ---
@@ -67,7 +80,8 @@ flowchart LR
 - [使い方 (CLI)](#使い方-cli)
 - [Python API](#python-api)
 - [レイテンシ](#レイテンシ)
-- [公開データセット検証](#公開データセット検証-south-building-128-枚)
+- [公開データセット検証 (south-building)](#公開データセット検証-south-building-128-枚)
+- [公開データセット検証 (Cambridge ShopFacade)](#公開データセット検証-cambridge-shopfacade-334-枚)
 - [ROS2 統合](#ros2-統合)
 - [制約 / 注意](#制約--注意)
 - [開発](#開発)
@@ -413,6 +427,64 @@ python3 scripts/evaluate_south_building.py \
 
 </details>
 
+## 公開データセット検証 (Cambridge ShopFacade, 334 枚)
+
+south-building は単一日のキャプチャなので "条件が一定で簡単" な部類です。
+そこでもう 1 段難しい標準ベンチマーク **[Cambridge Landmarks](https://www.repository.cam.ac.uk/handle/1810/251336) ShopFacade**
+(屋外の通り、撮影日が異なる、人や車の写り込みあり) でも検証しました。
+公式 train/test split (231 db / 103 test) をそのまま使い、
+DISK + LightGlue + NetVLAD で 1 度だけ実行した結果:
+
+| 指標 | 値 |
+|---|---|
+| **成功率** | **103 / 103** |
+| inlier 数 (median) | ≈ 5000 |
+| reprojection error | 〜5 px |
+| **回転誤差** | median **0.93°**, mean 0.99°, max 2.49° |
+| **並進誤差** | median **0.21 m**, max 2.08 m<br>(シーン全幅 42.7 m、つまり **0.49 % / 4.89 %**) |
+| 1 query あたり所要 (in-process API) | median **5.84 s** (1920×1080) |
+| Sim(3) 整列に使った train 画像 | 231 / 231 (100% reconstructed) |
+
+south-building (median 0.066° / 0.034%) より 1 桁悪化していますが、
+照度変化・歩行者・車両・経年変化を含む屋外データに対して **全 103 枚** が成功し、
+median 並進誤差がシーン全幅の 0.5 % 未満に収まっているのは、
+このパイプラインが "easy デモ" 専用ではなく VPS ベンチの本流で動くことを示しています。
+
+<details>
+<summary><b>再現手順 (クリックで展開)</b></summary>
+
+```bash
+# 1) データ取得 (~1.4 GB)
+mkdir -p /tmp/vml-public/cambridge && cd /tmp/vml-public/cambridge
+curl -L -o ShopFacade.zip \
+  "https://api.repository.cam.ac.uk/server/api/core/bitstreams/4e5c67dd-9497-4a1d-add4-fd0e00bcb8cb/content"
+unzip -q ShopFacade.zip
+
+# 2) train/test を flat な symlink に並べ、intrinsics.json を書き出す
+python3 scripts/evaluate_cambridge.py prepare \
+    --scene /tmp/vml-public/cambridge/ShopFacade \
+    --work /tmp/vml-public/cambridge/work
+
+# 3) 231 train 画像で build-map
+visual-map-localizer build-map \
+    --images /tmp/vml-public/cambridge/work/train_images \
+    --output /tmp/vml-public/cambridge/work/map \
+    --local-feature disk --matcher disk+lightglue \
+    --num-covisible-pairs 20
+
+# 4) 103 test 画像を一気に localize (in-process API)
+python3 scripts/evaluate_cambridge.py localize-all \
+    --scene /tmp/vml-public/cambridge/ShopFacade \
+    --work /tmp/vml-public/cambridge/work
+
+# 5) Sim(3) 整列 + 回転 / 並進誤差を集計
+python3 scripts/evaluate_cambridge.py score \
+    --scene /tmp/vml-public/cambridge/ShopFacade \
+    --work /tmp/vml-public/cambridge/work
+```
+
+</details>
+
 ## ROS2 統合
 
 ROS2 (Jazzy 想定) ノードは [`ros2/visual_map_localizer_ros/`](ros2/visual_map_localizer_ros/) 配下にあります。
@@ -467,7 +539,8 @@ CI ではこれを Python 3.10 / 3.11 / 3.12 で実行しています ([`.github
 
 - [`examples/build_map_example.py`](examples/build_map_example.py)
 - [`examples/localize_example.py`](examples/localize_example.py)
-- [`scripts/evaluate_south_building.py`](scripts/evaluate_south_building.py) — 公開データセット検証用の Sim(3) 整列 + pose 誤差評価
+- [`scripts/evaluate_south_building.py`](scripts/evaluate_south_building.py) — south-building 用の Sim(3) 整列 + pose 誤差評価
+- [`scripts/evaluate_cambridge.py`](scripts/evaluate_cambridge.py) — Cambridge Landmarks (NVM) 用の 3-stage 評価 (`prepare` / `localize-all` / `score`)
 - [`scripts/profile_localize.py`](scripts/profile_localize.py) — 常駐プロセスのレイテンシ計測
 
 ## ライセンス

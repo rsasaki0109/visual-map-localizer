@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Cambridge Landmarks ShopFacade end-to-end evaluation
+  (`scripts/evaluate_cambridge.py`): 103/103 success, median 0.93° /
+  0.21 m (0.49 % of scene). README at-a-glance header now shows two
+  datasets side by side (south-building + Cambridge).
+
 ## [0.1.0] - 2026-05-01
 
 First public release.
