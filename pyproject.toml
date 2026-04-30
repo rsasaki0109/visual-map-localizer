@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visual-map-localizer"
-version = "0.2.0"
+version = "0.2.1"
 description = "Single-image 6DoF Visual Positioning System on top of COLMAP / hloc"
 readme = "README.md"
 requires-python = ">=3.10"

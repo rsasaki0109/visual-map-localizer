@@ -7,18 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-01
+
+Patch release: corrects the numbers reported in v0.2.0. The localizer
+itself is unchanged — only the evaluation methodology and the
+documented error figures were fixed.
+
 ### Changed
 - `scripts/evaluate_cambridge.py score` now defaults to a robust
   IRLS Sim(3) fit between our SfM and the dataset's NVM frame.
-  When auditing the v0.2.0 results we noticed a handful of train
-  images were mis-registered in our SfM (2 / 231 on ShopFacade,
-  13 / 895 on Old Hospital) and biased the alignment. With the
-  outliers dropped, the published median errors tighten:
-    - ShopFacade: 0.93°/0.21 m → **0.61°/0.096 m** (0.49% → 0.23%)
-    - Old Hospital: 1.11°/0.88 m → **1.11°/0.85 m** (1.42% → 1.37%)
+  While auditing the v0.2.0 results ("did the localizer actually
+  estimate correctly?") we found that a handful of train images
+  were mis-registered in our SfM (2 / 231 on ShopFacade,
+  13 / 895 on Old Hospital) and these alignment outliers biased
+  the least-squares Sim(3) fit, inflating the reported test errors.
+  With the outliers dropped, the published median errors tighten:
+    - **ShopFacade**: 0.93° / 0.21 m → **0.61° / 0.096 m** (0.49 % → 0.23 % of scene)
+    - **Old Hospital**: 1.11° / 0.88 m → **1.11° / 0.85 m** (1.42 % → 1.37 %)
   Use `--no-robust-sim3` to reproduce the legacy LS behaviour.
 - README at-a-glance and detail sections updated with the
-  robust-Sim(3) numbers.
+  robust-Sim(3) numbers, plus an explicit methodology note.
+
+### Notes
+- The successful localization rate (10/10, 103/103, 182/182) is
+  unchanged because that came from the localizer's own success
+  flag, not from the alignment.
+- The numbers shipped in v0.2.0 were *conservative* (worse than
+  reality), not overstated, so users pinned to v0.2.0 are not
+  affected operationally — only the published expectation
+  changes.
 
 ## [0.2.0] - 2026-05-01
 
@@ -121,6 +138,7 @@ First public release.
 - **ROS2 end-to-end**: identical accuracy via `/camera/image_raw` →
   `/vps_pose` round-trip.
 
-[Unreleased]: https://github.com/rsasaki0109/visual-map-localizer/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/rsasaki0109/visual-map-localizer/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/rsasaki0109/visual-map-localizer/releases/tag/v0.2.1
 [0.2.0]: https://github.com/rsasaki0109/visual-map-localizer/releases/tag/v0.2.0
 [0.1.0]: https://github.com/rsasaki0109/visual-map-localizer/releases/tag/v0.1.0
