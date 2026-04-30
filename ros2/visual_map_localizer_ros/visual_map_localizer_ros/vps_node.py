@@ -22,11 +22,21 @@ Pose convention
 
 Frame drop policy
 -----------------
-The localizer takes ~1 s per frame on a modern GPU; ROS cameras typically
-publish at 30 Hz. To avoid an unbounded backlog we keep an in-flight flag and
-silently drop incoming frames while the previous localization is still being
-processed. The latest dropped frame is not retried — it is simply lost. This
-matches the "absolute pose at low Hz" use case for which VPS is intended.
+The localizer takes meaningfully longer per frame than a typical 30 Hz
+camera period. To avoid an unbounded backlog we keep an in-flight flag
+and silently drop incoming frames while the previous localization is
+still being processed. The latest dropped frame is not retried — it is
+simply lost. This matches the "absolute pose at low Hz" use case for
+which VPS is intended.
+
+Outlier rejection
+-----------------
+After a successful localization but before publishing, the new pose is
+fed through a velocity-based gate (see ``pose_gate.PoseGate``). Any pose
+whose implied linear or angular velocity (versus the last accepted pose)
+exceeds the configured limits is logged and *not* published. The gate
+state is reset after ``outlier_state_timeout_sec`` seconds without an
+accepted pose so that the node can re-anchor after a long gap.
 """
 from __future__ import annotations
 from pathlib import Path
@@ -49,6 +59,8 @@ from std_msgs.msg import Header
 
 from visual_map_localizer import VisualMapLocalizer
 from visual_map_localizer.config import LocalizeConfig
+
+from .pose_gate import PoseGate
 
 
 # --------------------------------------------------------------------- helpers
@@ -181,6 +193,15 @@ class VpsNode(Node):
         self.declare_parameter("cov_base_pos", 0.10)  # metres for sqrt(inliers)=1
         self.declare_parameter("cov_base_rot_deg", 5.0)
 
+        # Velocity-based outlier gate. Set either threshold to <= 0 to disable.
+        # Defaults are loose enough for ground robots / handheld cameras
+        # (10 m/s ≈ 36 km/h, 60 deg/s ≈ a quick spin) but reject the
+        # large-jump VPS failures we typically see (matching latching
+        # onto a different facade or floor).
+        self.declare_parameter("outlier_max_linear_velocity_mps", 10.0)
+        self.declare_parameter("outlier_max_angular_velocity_dps", 60.0)
+        self.declare_parameter("outlier_state_timeout_sec", 30.0)
+
         map_dir = self.get_parameter("map_dir").value
         if not map_dir:
             raise RuntimeError("'map_dir' parameter is required")
@@ -210,6 +231,20 @@ class VpsNode(Node):
 
         self._pycolmap_camera = self._build_static_camera_or_none()
         self._camera_info_received = self._pycolmap_camera is not None
+
+        mlv = float(self.get_parameter("outlier_max_linear_velocity_mps").value)
+        mav = float(self.get_parameter("outlier_max_angular_velocity_dps").value)
+        if mlv > 0 and mav > 0:
+            timeout = float(self.get_parameter("outlier_state_timeout_sec").value)
+            self.pose_gate: Optional[PoseGate] = PoseGate(mlv, mav, timeout)
+            self.get_logger().info(
+                f"outlier gate enabled: |v|<={mlv:.2f} m/s, "
+                f"|ω|<={mav:.1f} deg/s (timeout {timeout:.0f}s)"
+            )
+        else:
+            self.pose_gate = None
+            self.get_logger().info("outlier gate disabled")
+        self._gate_rejected_counter = 0
 
         # -------- publishers
         pose_topic = self.get_parameter("pose_topic").value
@@ -324,6 +359,19 @@ class VpsNode(Node):
         # camera-in-world = (-R_cw^T t_cw, R_cw^T)
         R_wc = R_cw.T
         C_wc = -R_wc @ t_cw
+
+        if self.pose_gate is not None:
+            stamp_sec = float(image_header.stamp.sec) + \
+                float(image_header.stamp.nanosec) * 1e-9
+            accepted, why = self.pose_gate.accept(R_wc, C_wc, stamp_sec)
+            if not accepted:
+                self._gate_rejected_counter += 1
+                self.get_logger().warn(
+                    f"frame {self._frame_counter}: outlier-rejected ({why}); "
+                    f"total rejected={self._gate_rejected_counter}"
+                )
+                return
+
         q = _quat_from_rotmat(R_wc)  # (x, y, z, w)
 
         cov = self._estimate_covariance(res)

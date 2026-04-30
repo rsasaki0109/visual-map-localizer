@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- ROS2 outlier-rejection gate (`pose_gate.PoseGate` + 8 unit tests):
+  any localized pose whose implied linear (>10 m/s) or angular
+  (>60 deg/s) velocity is unrealistic vs. the last accepted pose is
+  logged and dropped instead of published. Three new node parameters:
+  `outlier_max_linear_velocity_mps`, `outlier_max_angular_velocity_dps`,
+  `outlier_state_timeout_sec`. The gate state resets after a long gap
+  to avoid permanently blocking re-localization.
 - Cambridge Landmarks ShopFacade end-to-end evaluation
   (`scripts/evaluate_cambridge.py`): 103/103 success, median 0.93° /
   0.21 m (0.49 % of scene).

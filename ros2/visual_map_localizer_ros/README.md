@@ -75,6 +75,9 @@ ros2 run visual_map_localizer_ros vps_node \
 | `min_inliers` | `12` | success 判定の閾値 |
 | `cov_base_pos` | `0.10` | 共分散ヒューリスティクス: 位置 base σ (m) |
 | `cov_base_rot_deg` | `5.0` | 共分散ヒューリスティクス: 回転 base σ (deg) |
+| `outlier_max_linear_velocity_mps` | `10.0` | これを超える線速度を含意する pose は破棄 (≤0 で無効) |
+| `outlier_max_angular_velocity_dps` | `60.0` | これを超える角速度を含意する pose は破棄 (≤0 で無効) |
+| `outlier_state_timeout_sec` | `30.0` | この秒数以上 pose 受理がないと gate state をリセット (再アンカー) |
 
 ## 設計ノート
 
@@ -93,6 +96,22 @@ ros2 run visual_map_localizer_ros vps_node \
 ありません。`robot_localization` 等に流す場合は計測実験の上で
 `cov_base_pos` / `cov_base_rot_deg` を調整してください。Hessian ベースの
 推定を入れたい場合は `_estimate_covariance` を差し替えるだけです。
+
+### Outlier rejection (pose gate)
+
+成功した localize 結果でも、稀に **建物の別の階・別の似たファサードに
+match が引っ掛かって** 同じ inlier 数で全く違う pose を返すことがあります。
+inlier や reproj error だけでは見抜けないので、直前 accept した pose との
+**線速度 / 角速度** を計算し、上限を超える場合は publish しないようにしています。
+
+* 既定値 (`10 m/s` / `60 deg/s`) は地上ロボット・手持ちカメラには十分緩く、
+  典型的な VPS 失敗 (建物別フロアにジャンプ) は確実に弾けるレベル。
+* gate ロジックは `pose_gate.PoseGate` に切り出してあり、`rclpy` 非依存で
+  `test_pose_gate.py` から単体テスト可能。
+* 長時間無受信 (例: ノードが一旦止まった) で過去の anchor が古くなった場合は
+  `outlier_state_timeout_sec` 秒で state をリセットして再アンカーします。
+* まったく無効化したい場合は `outlier_max_linear_velocity_mps:=0.0`
+  (どちらかの閾値を `<=0` にすると gate 全体が disable)。
 
 ### Pose 規約
 

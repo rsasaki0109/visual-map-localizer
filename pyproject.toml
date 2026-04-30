@@ -67,7 +67,11 @@ line-length = 100
 target-version = "py310"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# ros2/.../test contains a couple of pure-Python helper tests that
+# guard themselves with `pytest.importorskip("rclpy")` for the
+# ROS-touching cases, so it is safe to collect them even when CI
+# does not have rclpy / sensor_msgs available.
+testpaths = ["tests", "ros2/visual_map_localizer_ros/test"]
 # launch_testing (ROS) hijacks directory-level test collection if it is
 # installed system-wide. Disable it together with its ROS companion plugin
 # so pytest discovers our normal test_*.py files.
