@@ -84,8 +84,6 @@ First public release.
   translation error 0.034 % of scene extent.
 - **ROS2 end-to-end**: identical accuracy via `/camera/image_raw` →
   `/vps_pose` round-trip.
-- **Persistent-process latency**: 4.4 s warm-up, 1.41 s steady-state
-  per frame on an GPU.
 
 [Unreleased]: https://github.com/rsasaki0109/visual-map-localizer/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/rsasaki0109/visual-map-localizer/releases/tag/v0.1.0

@@ -85,7 +85,7 @@ flowchart LR
 - [インストール](#インストール)
 - [使い方 (CLI)](#使い方-cli)
 - [Python API](#python-api)
-- [レイテンシ](#レイテンシ)
+- [レイテンシの傾向](#レイテンシの傾向)
 - [公開データセット検証 (south-building)](#公開データセット検証-south-building-128-枚)
 - [公開データセット検証 (Cambridge ShopFacade)](#公開データセット検証-cambridge-shopfacade-334-枚)
 - [公開データセット検証 (Cambridge Old Hospital)](#公開データセット検証-cambridge-old-hospital-1077-枚)
@@ -101,7 +101,7 @@ flowchart LR
 | **CLI ファースト** | `visual-map-localizer build-map` と `... localize` だけで完結 |
 | **Python API** | `VisualMapLocalizer().localize(path or np.ndarray)` で常駐サーバ向けに使い回し可 |
 | **ROS2 ノード同梱** | `/camera/image_raw` → `/vps_pose` (PoseWithCovarianceStamped) |
-| **GPU / CPU 両対応** | CUDA があれば 1.4s/frame、CPU でも動く |
+| **GPU / CPU 両対応** | CUDA があれば実用的な速度、CPU でも動く |
 | **JSON 出力** | pose・inlier 数・reprojection error・retrieval Top-K |
 | **PnP 二段構え** | pycolmap が第 1 選択 / OpenCV `solvePnPRansac` が fallback |
 | **Apache-2.0 構成** | DISK + LightGlue + NetVLAD なら third-party submodule 不要 |
@@ -349,19 +349,18 @@ build_map(
 )
 ```
 
-## レイテンシ
+## レイテンシの傾向
 
-south-building (118 db imgs, 3072×2304 query, GPU, DISK + LightGlue + NetVLAD):
+絶対値はハードウェアと画像サイズに大きく依存するので数値は出しません。
+代わりに **設計上の傾向** を整理しておきます (詳細プロファイルは
+[`scripts/profile_localize.py`](scripts/profile_localize.py) で測れます):
 
-| 起動方法 | 初回 (warmup 込) | 2 回目以降 (steady-state) |
-|---|---|---|
-| `localize` を毎回 subprocess で起動 | — | **8.6 s / query** |
-| `VisualMapLocalizer` 使い回し (path 入力) | 4.1 s | **1.1 s / query** |
-| `VisualMapLocalizer` 使い回し (ndarray 入力) | 4.4 s | **1.4 s / query** |
-
-> ndarray 版の +0.3s は PNG エンコードが主因。ROS 系の **1280×720** クラスなら
-> エンコードが 0.03s 程度に縮むので、サブセカンドが現実的です。
-> 詳細プロファイルは `scripts/profile_localize.py` を参照。
+- `localize` を **毎回 subprocess** で起動するよりも、
+  **`VisualMapLocalizer` インスタンスを使い回す** ほうが圧倒的に速い
+  (warm-up の NetVLAD / DISK / LightGlue 初期化を 1 回で済ませられるため)。
+- ndarray を渡す経路は path を渡す経路よりも僅かに遅い (PNG エンコードのコスト)。
+  ROS の 1280×720 クラスではこの差はほぼ無視できる。
+- query の解像度を半分にすると DISK / LightGlue が概ね線形に高速化する。
 
 ## 公開データセット検証 (south-building, 128 枚)
 
@@ -375,7 +374,6 @@ Sim(3) 整列で評価:
 | **成功率** | **10 / 10** |
 | inlier 数 | 2616〜5229 |
 | reprojection error | 1.25〜2.99 px |
-| 1 query あたり所要 (CPU/GPU 込) | 約 8.6 s |
 | **回転誤差** | median **0.066°**, mean 0.074°, max 0.174° |
 | **並進誤差** | median **0.0034**, max 0.0046<br>(シーン全幅 10.81、つまり **0.03〜0.04 %**) |
 | 自前 SfM と reference SfM の整列残差 | mean 0.0035 (= 0.03 % of scene scale) |
@@ -449,7 +447,6 @@ DISK + LightGlue + NetVLAD で 1 度だけ実行した結果:
 | reprojection error | 〜5 px |
 | **回転誤差** | median **0.93°**, mean 0.99°, max 2.49° |
 | **並進誤差** | median **0.21 m**, max 2.08 m<br>(シーン全幅 42.7 m、つまり **0.49 % / 4.89 %**) |
-| 1 query あたり所要 (in-process API) | median **5.84 s** (1920×1080) |
 | Sim(3) 整列に使った train 画像 | 231 / 231 (100% reconstructed) |
 
 south-building (median 0.066° / 0.034%) より 1 桁悪化していますが、
@@ -505,7 +502,6 @@ ShopFacade はキャンパス内通りの 1 ファサードでしたが、もう
 | **回転誤差** | median **1.11°**, mean 1.19°, max 3.21° |
 | **並進誤差** | median **0.88 m**, max 2.43 m<br>(シーン全幅 62.30 m、つまり **1.42 % / 3.91 %**) |
 | Sim(3) 整列に使った train 画像 | 895 / 895 (100% reconstructed) |
-| build-map 所要 | ~4.5 h (GPU, DISK + LightGlue + NetVLAD) |
 
 ShopFacade (median 0.49 %) より約 3 倍悪化していますが、これは想定内です:
 シーンが約 1.5 倍広くなり、撮影距離も伸び、視点間の overlap も小さくなるため、
