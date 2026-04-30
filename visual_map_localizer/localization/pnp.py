@@ -13,7 +13,7 @@ convention, matching COLMAP).
 """
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import List, Optional, Sequence
+from typing import Optional, Sequence
 import logging
 
 import cv2

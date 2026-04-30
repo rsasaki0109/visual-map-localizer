@@ -1,5 +1,9 @@
 # visual-map-localizer
 
+[![CI](https://github.com/rsasaki0109/visual-map-localizer/actions/workflows/ci.yml/badge.svg)](https://github.com/rsasaki0109/visual-map-localizer/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
+
 COLMAP で構築した SfM 地図に対して、**1 枚の query 画像から 6DoF カメラ姿勢を推定する**
 Visual Positioning System (VPS) 実装です。
 内部では [hloc (Hierarchical-Localization)](https://github.com/cvg/Hierarchical-Localization)
@@ -23,27 +27,38 @@ query.jpg ─▶ NetVLAD top-K 検索 ─▶ SuperPoint+LightGlue マッチン�
 
 ## インストール
 
-### 1. PyTorch を先に CUDA に合わせて入れる
+### 軽量インストール (テスト・PnP・JSON I/O だけ使う場合)
+
+`torch` / `hloc` を入れずに済むので、小さい CI 環境などに最適です。
+`visual_map_localizer` は PEP 562 lazy import で深層学習依存を遅延ロード
+するため、Retrieval / Matching を呼ばない限りこの構成でも動きます。
+
+```bash
+pip install -e .
+```
+
+### フルインストール (実際に Map を作って Localize する場合)
+
+#### 1. PyTorch を先に CUDA に合わせて入れる
 
 ```bash
 # 例: CUDA 12.1
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 ```
 
-### 2. 本パッケージと依存ライブラリ
+#### 2. 本パッケージ + deep extras
 
 ```bash
-pip install -r requirements.txt
-pip install -e .
+pip install -e .[deep]
 ```
 
-### 3. hloc を git からインストール (PyPI 未公開)
+#### 3. hloc を git からインストール (PyPI 未公開)
 
 ```bash
 pip install git+https://github.com/cvg/Hierarchical-Localization.git@master
 ```
 
-### 4. COLMAP の動作確認
+#### 4. COLMAP の動作確認
 
 `pycolmap` は wheel 同梱のためバイナリは別途不要です。サンプルが動くか:
 

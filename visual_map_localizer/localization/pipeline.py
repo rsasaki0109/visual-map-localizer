@@ -13,9 +13,8 @@ import logging
 import shutil
 import time
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import List, Optional
 
-import h5py
 import numpy as np
 
 from ..config import (
@@ -29,7 +28,6 @@ from ..config import (
 from ..io.camera import infer_camera, build_camera
 from ..io.colmap_map import ColmapMap
 from ..io.output import LocalizationResult
-from .pnp import estimate_pose
 
 logger = logging.getLogger(__name__)
 

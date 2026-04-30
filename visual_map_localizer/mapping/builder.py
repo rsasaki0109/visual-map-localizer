@@ -24,7 +24,6 @@ from ..config import (
     DB_IMAGE_LIST_FILE,
     FEATURES_FILE,
     GLOBAL_DESC_FILE,
-    LOC_PAIRS_FILE,
     META_FILE,
     SFM_DIRNAME,
     SFM_PAIRS_FILE,

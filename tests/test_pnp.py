@@ -38,9 +38,8 @@ def _make_synthetic_correspondences(camera, R, t, n=100, seed=0):
     tcw = t.reshape(3, 1)
     pts_world = (Rcw.T @ (pts3d.T - tcw)).T
 
-    # Project from the world frame using K.
+    # Project from the world frame.
     fx, fy, cx, cy = camera.params
-    K = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
     pts_cam = (Rcw @ pts_world.T + tcw).T
     proj = (pts_cam[:, :2] / pts_cam[:, 2:3])
     pts2d = proj * np.array([fx, fy]) + np.array([cx, cy])
