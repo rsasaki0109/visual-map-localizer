@@ -89,10 +89,11 @@ flowchart LR
 ## Quick Start
 
 south-building (COLMAP 公式の 128 枚デモデータセット) で end-to-end が動くまでを 1 つのブロックに。
+**1 枚を held-out query** にして残り 127 枚で build-map することで、ちゃんと "未知画像を localize する" 流れになります。
 
 ```bash
 # 0) インストール (deep extras + hloc は localize / build-map に必要)
-pip install -e .[deep]
+pip install -e ".[deep]"
 pip install git+https://github.com/cvg/Hierarchical-Localization.git@master
 
 # 1) データ取得
@@ -101,17 +102,22 @@ curl -L -o south-building.zip \
   https://github.com/colmap/colmap/releases/download/3.11.1/south-building.zip
 unzip -q south-building.zip
 
-# 2) マップ構築 (DISK + LightGlue, retrieval-based pairs)
+# 2) 1 枚を held-out query に分離 (= 残り 127 枚を DB として使う)
+mkdir -p /tmp/vml-public/db_images
+cp /tmp/vml-public/south-building/images/*.JPG /tmp/vml-public/db_images/
+mv /tmp/vml-public/db_images/P1180141.JPG /tmp/vml-public/query.JPG
+
+# 3) マップ構築 (DISK + LightGlue, retrieval-based pairs)
 visual-map-localizer build-map \
-    --images /tmp/vml-public/south-building/images \
+    --images /tmp/vml-public/db_images \
     --output /tmp/vml-public/map \
     --local-feature disk --matcher disk+lightglue \
     --num-covisible-pairs 20
 
-# 3) 1 枚 localize (south-building の intrinsics をそのまま指定)
+# 4) held-out query を localize (south-building の intrinsics をそのまま指定)
 visual-map-localizer localize \
     --map /tmp/vml-public/map \
-    --query /tmp/vml-public/south-building/images/P1180141.JPG \
+    --query /tmp/vml-public/query.JPG \
     --camera-model SIMPLE_RADIAL \
     --camera-params 2559.68,1536,1152,-0.0204997 \
     --image-size 3072x2304
@@ -119,6 +125,8 @@ visual-map-localizer localize \
 
 > **TL;DR**: 出力 JSON に `success: true` と 1000 を超える `inliers`、
 > `reproj_error < 3px` が出ていれば成功です。
+> より厳密な精度評価 (10 query × Sim(3) 整列 + reference SfM 比較) は
+> [公開データセット検証](#公開データセット検証-south-building-128-枚) を参照。
 
 ## インストール
 
@@ -139,7 +147,7 @@ pip install -e .
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 
 # 2) 本パッケージ + deep extras
-pip install -e .[deep]
+pip install -e ".[deep]"
 
 # 3) hloc (PyPI 未公開なので git から)
 pip install git+https://github.com/cvg/Hierarchical-Localization.git@master

@@ -7,7 +7,7 @@ name = "visual-map-localizer"
 version = "0.1.0"
 description = "Single-image 6DoF Visual Positioning System on top of COLMAP / hloc"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [
     { name = "Ryohei Sasaki" }
@@ -46,6 +46,12 @@ deep = [
     "torch>=2.0",
     "torchvision>=0.15",
 ]
+# Required only to regenerate `docs/assets/demo.gif` via
+# `python scripts/render_demo.py`. Plain users do not need this.
+demo = [
+    "matplotlib>=3.7",
+    "imageio>=2.30",
+]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
@@ -58,7 +64,7 @@ exclude = ["tests*", "examples*", "docs*", "scripts*"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

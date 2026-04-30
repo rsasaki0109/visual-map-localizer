@@ -8,7 +8,9 @@ For each successfully localized south-building query, draws:
     |                          |   localized query cam (green)   |
     +--------------------------+---------------------------------+
 
-Requires only matplotlib + Pillow + imageio + pycolmap.
+Install the matplotlib + imageio extras before running:
+
+    pip install -e ".[demo]"
 """
 from __future__ import annotations
 
