@@ -1,35 +1,123 @@
+<div align="center">
+
 # visual-map-localizer
+
+**Single-image 6DoF Visual Positioning System on top of COLMAP / hloc.**
+
+*1 枚の画像からカメラ姿勢を推定する、CLI / Python / ROS2 兼用の VPS*
 
 [![CI](https://github.com/rsasaki0109/visual-map-localizer/actions/workflows/ci.yml/badge.svg)](https://github.com/rsasaki0109/visual-map-localizer/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
+[![COLMAP](https://img.shields.io/badge/SfM-COLMAP%20%2F%20pycolmap-orange.svg)](https://github.com/colmap/colmap)
+[![hloc](https://img.shields.io/badge/pipeline-hloc-9cf.svg)](https://github.com/cvg/Hierarchical-Localization)
+[![ROS2](https://img.shields.io/badge/ROS2-Jazzy-22314E.svg)](https://docs.ros.org/en/jazzy/)
+
+</div>
+
+---
+
+<table align="center">
+<tr>
+<td align="center"><sub>Success rate</sub><br><b>10 / 10</b></td>
+<td align="center"><sub>Median rot. error</sub><br><b>0.066°</b></td>
+<td align="center"><sub>Median trans. error</sub><br><b>0.034 %</b><br><sub>(of scene extent)</sub></td>
+<td align="center"><sub>Steady-state latency</sub><br><b>1.4 s / frame</b></td>
+</tr>
+<tr>
+<td colspan="4" align="center"><sub>south-building (118 db / 10 query, GPU, DISK + LightGlue + NetVLAD)</sub></td>
+</tr>
+</table>
+
+---
+
+## 概要
 
 COLMAP で構築した SfM 地図に対して、**1 枚の query 画像から 6DoF カメラ姿勢を推定する**
 Visual Positioning System (VPS) 実装です。
 内部では [hloc (Hierarchical-Localization)](https://github.com/cvg/Hierarchical-Localization)
-の SuperPoint / LightGlue / NetVLAD パイプラインを薄くラップしつつ、CLI と
-クリーンな Python API を被せています。
+の Retrieval / Matching パイプラインを薄くラップしつつ、CLI と
+クリーンな Python API、そして ROS2 ノードを同梱しています。
 
+```mermaid
+flowchart LR
+    Q([query image]) --> R[NetVLAD<br/>top-K retrieval]
+    R --> M[DISK / SuperPoint<br/>+ LightGlue matching]
+    M --> C[2D-3D 対応構築]
+    C --> P[PnP + RANSAC<br/>pycolmap → OpenCV fallback]
+    P --> O([6DoF pose<br/>R, t, qvec])
+
+    style Q fill:#fef3c7,stroke:#f59e0b,color:#000
+    style O fill:#d1fae5,stroke:#10b981,color:#000
+    style P fill:#dbeafe,stroke:#3b82f6,color:#000
 ```
-query.jpg ─▶ NetVLAD top-K 検索 ─▶ SuperPoint+LightGlue マッチング
-                                  ─▶ 2D-3D 対応構築 ─▶ PnP+RANSAC
-                                  ─▶ 6DoF pose (R, t)
+
+## 目次
+
+- [ハイライト](#ハイライト)
+- [Quick Start](#quick-start)
+- [インストール](#インストール)
+- [使い方 (CLI)](#使い方-cli)
+- [Python API](#python-api)
+- [レイテンシ](#レイテンシ)
+- [公開データセット検証](#公開データセット検証-south-building-128-枚)
+- [ROS2 統合](#ros2-統合)
+- [制約 / 注意](#制約--注意)
+- [開発](#開発)
+- [ライセンス](#ライセンス)
+
+## ハイライト
+
+| | |
+|---|---|
+| **CLI ファースト** | `visual-map-localizer build-map` と `... localize` だけで完結 |
+| **Python API** | `VisualMapLocalizer().localize(path or np.ndarray)` で常駐サーバ向けに使い回し可 |
+| **ROS2 ノード同梱** | `/camera/image_raw` → `/vps_pose` (PoseWithCovarianceStamped) |
+| **GPU / CPU 両対応** | CUDA があれば 1.4s/frame、CPU でも動く |
+| **JSON 出力** | pose・inlier 数・reprojection error・retrieval Top-K |
+| **PnP 二段構え** | pycolmap が第 1 選択 / OpenCV `solvePnPRansac` が fallback |
+| **Apache-2.0 構成** | DISK + LightGlue + NetVLAD なら third-party submodule 不要 |
+| **軽量 install** | lazy import で `torch` / `hloc` 抜きでも import / unit-test が通る |
+
+## Quick Start
+
+south-building (COLMAP 公式の 128 枚デモデータセット) で end-to-end が動くまでを 1 つのブロックに。
+
+```bash
+# 0) インストール (deep extras + hloc は localize / build-map に必要)
+pip install -e .[deep]
+pip install git+https://github.com/cvg/Hierarchical-Localization.git@master
+
+# 1) データ取得
+mkdir -p /tmp/vml-public && cd /tmp/vml-public
+curl -L -o south-building.zip \
+  https://github.com/colmap/colmap/releases/download/3.11.1/south-building.zip
+unzip -q south-building.zip
+
+# 2) マップ構築 (DISK + LightGlue, retrieval-based pairs)
+visual-map-localizer build-map \
+    --images /tmp/vml-public/south-building/images \
+    --output /tmp/vml-public/map \
+    --local-feature disk --matcher disk+lightglue \
+    --num-covisible-pairs 20
+
+# 3) 1 枚 localize (south-building の intrinsics をそのまま指定)
+visual-map-localizer localize \
+    --map /tmp/vml-public/map \
+    --query /tmp/vml-public/south-building/images/P1180141.JPG \
+    --camera-model SIMPLE_RADIAL \
+    --camera-params 2559.68,1536,1152,-0.0204997 \
+    --image-size 3072x2304
 ```
 
-## 特徴
-
-* **CLI ファースト**: `visual-map-localizer build-map` / `... localize`
-* **モジュール分割**: `retrieval / matching / localization / mapping / io / cli`
-* **GPU あり/なし両対応** (CPU でも動くが、推論は遅め)
-* **JSON 出力**: pose・inlier 数・reprojection error・retrieval Top-K
-* **PnP は pycolmap が第 1 選択 / OpenCV solvePnPRansac が fallback**
-* 将来 ROS2 ノード化することを前提とした設計 (`docs/ros2_integration.md`)
+> **TL;DR**: 出力 JSON に `success: true` と 1000 を超える `inliers`、
+> `reproj_error < 3px` が出ていれば成功です。
 
 ## インストール
 
-### 軽量インストール (テスト・PnP・JSON I/O だけ使う場合)
+### 軽量インストール (PnP・JSON I/O・テスト用途)
 
-`torch` / `hloc` を入れずに済むので、小さい CI 環境などに最適です。
+`torch` / `hloc` を入れずに済むので CI / ROS bridge / 解析スクリプトに最適。
 `visual_map_localizer` は PEP 562 lazy import で深層学習依存を遅延ロード
 するため、Retrieval / Matching を呼ばない限りこの構成でも動きます。
 
@@ -37,32 +125,19 @@ query.jpg ─▶ NetVLAD top-K 検索 ─▶ SuperPoint+LightGlue マッチン�
 pip install -e .
 ```
 
-### フルインストール (実際に Map を作って Localize する場合)
-
-#### 1. PyTorch を先に CUDA に合わせて入れる
+### フルインストール (Build-map / Localize を実行する場合)
 
 ```bash
-# 例: CUDA 12.1
+# 1) PyTorch を CUDA に合わせて (例: CUDA 12.1)
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-```
 
-#### 2. 本パッケージ + deep extras
-
-```bash
+# 2) 本パッケージ + deep extras
 pip install -e .[deep]
-```
 
-#### 3. hloc を git からインストール (PyPI 未公開)
-
-```bash
+# 3) hloc (PyPI 未公開なので git から)
 pip install git+https://github.com/cvg/Hierarchical-Localization.git@master
-```
 
-#### 4. COLMAP の動作確認
-
-`pycolmap` は wheel 同梱のためバイナリは別途不要です。サンプルが動くか:
-
-```bash
+# 4) 動作確認
 python -c "import pycolmap; print(pycolmap.__version__)"
 python -c "from hloc import extract_features; print(list(extract_features.confs)[:5])"
 ```
@@ -85,11 +160,9 @@ visual-map-localizer build-map \
     --matcher disk+lightglue
 ```
 
-> 補足: 既定の SuperPoint は hloc が `third_party/SuperGluePretrainedNetwork`
-> サブモジュールから読み込むため、hloc を git clone する際は
-> `git clone --recursive https://github.com/cvg/Hierarchical-Localization.git`
-> としてください。pip 経由で hloc を入れた場合はサブモジュールが含まれないため、
-> 上記の DISK + LightGlue 構成のほうが確実に動きます。
+> **補足:** 既定の SuperPoint は hloc が `third_party/SuperGluePretrainedNetwork`
+> サブモジュールから読み込みます。pip 経由で hloc を入れた場合はサブモジュールが
+> 含まれないため、上記の DISK + LightGlue 構成のほうが確実に動きます。
 
 主なオプション:
 
@@ -98,7 +171,7 @@ visual-map-localizer build-map \
 | `--local-feature` | `superpoint_aachen` | hloc の local feature config 名 |
 | `--global-descriptor` | `netvlad` | hloc の global descriptor config 名 |
 | `--matcher` | `superpoint+lightglue` | hloc の matcher config 名 |
-| `--num-covisible-pairs` | `None` (exhaustive) | 指定すると retrieval-based pairs (大規模向け) |
+| `--num-covisible-pairs` | `None` (exhaustive) | retrieval-based pairs (大規模向け) |
 | `--overwrite` | off | 中間ファイルを再生成 |
 
 出力ディレクトリ構造:
@@ -106,7 +179,7 @@ visual-map-localizer build-map \
 ```
 map/
 ├── sfm/                       # COLMAP sparse model
-├── features.h5                # SuperPoint
+├── features.h5                # SuperPoint / DISK
 ├── global_descriptors.h5      # NetVLAD
 ├── pairs-sfm.txt
 ├── matches-sfm.h5
@@ -172,9 +245,12 @@ visual-map-localizer localize \
 ```
 
 CLI の終了コード:
-* `0` 成功
-* `2` ローカライズ失敗 (画像 / マップは正常に読めた)
-* `1` 引数 / IO エラー
+
+| Code | 意味 |
+|---|---|
+| `0` | 成功 |
+| `2` | ローカライズ失敗 (画像 / マップは正常に読めた) |
+| `1` | 引数 / IO エラー |
 
 ### マップの中身を確認
 
@@ -212,14 +288,17 @@ localizer = VisualMapLocalizer("./map", config=LocalizeConfig(top_k=10))
 # どこかのストリーム / cv_bridge / カメラ SDK から:
 rgb = np.asarray(Image.open("query.jpg").convert("RGB"))  # H×W×3 uint8 (RGB)
 
-camera = pycolmap.Camera(model="PINHOLE", width=rgb.shape[1], height=rgb.shape[0],
-                         params=[fx, fy, cx, cy])
+camera = pycolmap.Camera(
+    model="PINHOLE", width=rgb.shape[1], height=rgb.shape[0],
+    params=[fx, fy, cx, cy],
+)
 result = localizer.localize(rgb, camera=camera, name="frame_0123.png")
 print(result.inliers, result.pose["t"])
 ```
 
-`localize()` は `Path` でも `np.ndarray` でも受け取ります。ndarray の場合は
-`camera` 必須（EXIF が無いので）。`name` は省略可能で、内部キャッシュキーになります。
+`localize()` は `Path` / `str` / `np.ndarray` のいずれも受け取ります。
+ndarray の場合は `camera` 必須（EXIF が無いため）。
+`name` は省略可能で、内部キャッシュキーになります。
 
 ### マップ構築 (Python API)
 
@@ -234,46 +313,42 @@ build_map(
 )
 ```
 
-## レイテンシ目安
+## レイテンシ
 
-south-building (118 db imgs, 3072×2304 query, GPU, DISK+LightGlue+NetVLAD):
+south-building (118 db imgs, 3072×2304 query, GPU, DISK + LightGlue + NetVLAD):
 
 | 起動方法 | 初回 (warmup 込) | 2 回目以降 (steady-state) |
 |---|---|---|
-| `python3 -m visual_map_localizer.cli.main localize ...` (毎回 subprocess) | — | **8.6 s / query** |
-| `VisualMapLocalizer` インスタンス使い回し (path) | 4.1 s | **1.1 s / query** |
-| `VisualMapLocalizer` インスタンス使い回し (ndarray) | 4.4 s | **1.4 s / query** |
+| `localize` を毎回 subprocess で起動 | — | **8.6 s / query** |
+| `VisualMapLocalizer` 使い回し (path 入力) | 4.1 s | **1.1 s / query** |
+| `VisualMapLocalizer` 使い回し (ndarray 入力) | 4.4 s | **1.4 s / query** |
 
-ndarray 版の +0.3s は PNG エンコードが主因。ROS 系の **1280×720** クラスならエンコードが 0.03s 程度に縮むので、サブセカンドが現実的です。
-詳細プロファイルは `scripts/profile_localize.py` を参照。
-
-## サンプル
-
-* `examples/build_map_example.py`
-* `examples/localize_example.py`
-* `scripts/download_example_data.sh` (placeholder — 推奨データセットの案内のみ)
-* `scripts/evaluate_south_building.py` — 公開データセット検証用の Sim(3) 整列 + pose 誤差評価
+> ndarray 版の +0.3s は PNG エンコードが主因。ROS 系の **1280×720** クラスなら
+> エンコードが 0.03s 程度に縮むので、サブセカンドが現実的です。
+> 詳細プロファイルは `scripts/profile_localize.py` を参照。
 
 ## 公開データセット検証 (south-building, 128 枚)
 
 COLMAP 公式の `south-building` データセット (Schönberger 氏配布、reference SfM 同梱) で
 end-to-end 検証した結果です。128 枚を 118 db / 10 query に分割し、118 枚で
-build-map → 10 枚を順次 localize → 同梱 reference SfM との pose 誤差を Sim(3) 整列で評価:
+build-map → 10 枚を順次 localize → 同梱 reference SfM との pose 誤差を
+Sim(3) 整列で評価:
 
 | 指標 | 値 |
 |---|---|
-| 成功率 | **10 / 10** |
+| **成功率** | **10 / 10** |
 | inlier 数 | 2616〜5229 |
 | reprojection error | 1.25〜2.99 px |
 | 1 query あたり所要 (CPU/GPU 込) | 約 8.6 s |
 | **回転誤差** | median **0.066°**, mean 0.074°, max 0.174° |
-| **並進誤差** | median **0.0034**, max 0.0046 (シーン全幅 10.81、つまり 0.03〜0.04%) |
-| 自前 SfM と reference SfM の整列残差 | mean 0.0035 (= 0.03% of scene scale) |
+| **並進誤差** | median **0.0034**, max 0.0046<br>(シーン全幅 10.81、つまり **0.03〜0.04 %**) |
+| 自前 SfM と reference SfM の整列残差 | mean 0.0035 (= 0.03 % of scene scale) |
 
 つまり、localizer が出す pose は **SfM 自身の数値ノイズと同オーダー** で
 reference SfM と一致しています。
 
-再現手順:
+<details>
+<summary><b>再現手順 (クリックで展開)</b></summary>
 
 ```bash
 # 1) データ取得
@@ -303,7 +378,7 @@ visual-map-localizer build-map \
     --local-feature disk --matcher disk+lightglue \
     --num-covisible-pairs 20
 
-# 4) 10 queries を localize (intrinsics は reference SfM のものをそのまま指定)
+# 4) 10 queries を localize
 mkdir -p /tmp/vml-public/results
 for q in /tmp/vml-public/query_images/*.JPG; do
     visual-map-localizer localize \
@@ -321,19 +396,11 @@ python3 scripts/evaluate_south_building.py \
     --results-dir /tmp/vml-public/results
 ```
 
-## 制約 / 注意
-
-詳細は [`docs/limitations.md`](docs/limitations.md) 参照。
-
-* 屋外の **強い照度変化 / 季節変化** には弱い (NetVLAD + SuperPoint の限界)
-* `--camera-model` を指定しない場合は EXIF / 60° FoV からの推定にフォールバック
-* SfM が成立する程度の画像 overlap が必要 (経験則: 隣接で 60% 以上)
-* SuperPoint / SuperGlue は研究用ライセンス。商用は DISK / LightGlue を推奨
+</details>
 
 ## ROS2 統合
 
-ROS2 (Jazzy 想定) ノードは `ros2/visual_map_localizer_ros/` 配下にあります。
-セットアップ・パラメータ詳細は [`ros2/visual_map_localizer_ros/README.md`](ros2/visual_map_localizer_ros/README.md) を参照。
+ROS2 (Jazzy 想定) ノードは [`ros2/visual_map_localizer_ros/`](ros2/visual_map_localizer_ros/) 配下にあります。
 
 ```bash
 # (build-map で作ったマップに対して)
@@ -342,28 +409,56 @@ ros2 launch visual_map_localizer_ros vps.launch.py \
     publish_tf:=true
 ```
 
-* sub: `/camera/image_raw` (sensor_msgs/Image) + `/camera/camera_info` (CameraInfo)
-* pub: `/vps_pose` (geometry_msgs/PoseWithCovarianceStamped) ※ ROS 慣例 world-from-camera
-* TF: `frame_id → child_frame_id` (`publish_tf:=true`)
-* in-flight 中の画像は drop (1Hz 級の絶対姿勢源として利用)
+| | |
+|---|---|
+| **sub** | `/camera/image_raw` (sensor_msgs/Image) + `/camera/camera_info` (CameraInfo) |
+| **pub** | `/vps_pose` (geometry_msgs/PoseWithCovarianceStamped) ※ ROS 慣例 world-from-camera |
+| **TF** | `frame_id → child_frame_id` (`publish_tf:=true`) |
+| **drop policy** | in-flight 中の画像は drop (1Hz 級の絶対姿勢源として利用) |
+| **NumPy 2.x 互換** | cv_bridge を使わず手書き変換でビルド済み |
+
+詳細は [`ros2/visual_map_localizer_ros/README.md`](ros2/visual_map_localizer_ros/README.md) を参照。
+
+## 制約 / 注意
+
+詳細は [`docs/limitations.md`](docs/limitations.md) 参照。
+
+- 屋外の **強い照度変化 / 季節変化** には弱い (NetVLAD + SuperPoint の限界)
+- `--camera-model` を指定しない場合は EXIF / 60° FoV からの推定にフォールバック
+- SfM が成立する程度の画像 overlap が必要 (経験則: 隣接で 60% 以上)
+- SuperPoint / SuperGlue は研究用ライセンス。商用は **DISK + LightGlue** を推奨
 
 ## アーキテクチャ / 拡張
 
-* [`docs/architecture.md`](docs/architecture.md) — モジュール構成 / データフロー
-* [`docs/ros2_integration.md`](docs/ros2_integration.md) — 設計ノート (実装は `ros2/`)
-* 大規模地図対応 (sharding / Faiss ANN) はアーキテクチャドキュメントに記載
+- [`docs/architecture.md`](docs/architecture.md) — モジュール構成 / データフロー
+- [`docs/ros2_integration.md`](docs/ros2_integration.md) — 設計ノート (実装は `ros2/`)
+- 大規模地図対応 (sharding / Faiss ANN) はアーキテクチャドキュメントに記載
 
 ## 開発
 
 ```bash
 pip install -e ".[dev]"
 pytest -q
+ruff check visual_map_localizer tests
 ```
 
-* `tests/test_pnp.py` は pycolmap / OpenCV があれば実行されます。
-* `tests/test_imports.py` は重い依存なしで通る import スモークテストです。
+- `tests/test_pnp.py` は pycolmap / OpenCV があれば実行されます。
+- `tests/test_imports.py` は重い依存なしで通る import スモークテストです。
+- `tests/test_array_path.py` は ndarray 入力のキャッシュキー不変性を検証します。
+
+CI ではこれを Python 3.10 / 3.11 / 3.12 で実行しています ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))。
+
+## サンプル
+
+- [`examples/build_map_example.py`](examples/build_map_example.py)
+- [`examples/localize_example.py`](examples/localize_example.py)
+- [`scripts/evaluate_south_building.py`](scripts/evaluate_south_building.py) — 公開データセット検証用の Sim(3) 整列 + pose 誤差評価
+- [`scripts/profile_localize.py`](scripts/profile_localize.py) — 常駐プロセスのレイテンシ計測
 
 ## ライセンス
 
-Apache-2.0 (本リポジトリ)。
-内部利用するモデルの重み (SuperPoint / SuperGlue / NetVLAD) は **各々のライセンスに従う必要** があります。
+[Apache-2.0](LICENSE) (本リポジトリ)。
+
+内部で利用するモデル重み (SuperPoint / SuperGlue / NetVLAD) は **各々のライセンスに従う必要** があります。
+完全に商用フレンドリーな構成にしたい場合は、本 README で示す
+**DISK + LightGlue + NetVLAD** の組み合わせをご利用ください。
