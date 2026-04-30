@@ -12,7 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions CI: unit-test matrix (Python 3.10 / 3.11 / 3.12) and ruff lint.
 - `[deep]` optional extra in `pyproject.toml` for `torch` / `torchvision`,
   keeping the base install lightweight.
-- README badges (CI status, license).
+- README badges (CI status, license, Python, COLMAP, hloc, ROS2),
+  Mermaid pipeline diagram, table of contents, Quick Start block,
+  and an at-a-glance benchmark header.
+- `docs/assets/demo.gif` — animated demo showing 10 south-building
+  queries with their recovered cameras visualized in 3D.
+- `scripts/render_demo.py` — generator for the demo GIF
+  (matplotlib + Pillow + imageio + pycolmap).
 
 ### Changed
 - `torch` / `torchvision` are no longer base dependencies. Install them

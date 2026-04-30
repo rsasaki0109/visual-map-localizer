@@ -13,6 +13,13 @@
 [![hloc](https://img.shields.io/badge/pipeline-hloc-9cf.svg)](https://github.com/cvg/Hierarchical-Localization)
 [![ROS2](https://img.shields.io/badge/ROS2-Jazzy-22314E.svg)](https://docs.ros.org/en/jazzy/)
 
+<br>
+
+<img src="docs/assets/demo.gif" alt="visual-map-localizer demo: query image + localized camera in 3D" width="100%">
+
+<sub>Each frame: a single query image (left) and the camera pose recovered against a COLMAP map (right, green = localized camera).<br>
+South-Building dataset, 118 db / 10 query images, DISK + LightGlue + NetVLAD.</sub>
+
 </div>
 
 ---
